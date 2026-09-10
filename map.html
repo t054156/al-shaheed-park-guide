@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+<title>Live Park Map — Al Shaheed Park</title>
+<meta name="description" content="Find yourself inside Al Shaheed Park: live location, nearby cafés, restaurants, museums and facilities, walking directions and park routes.">
+<meta name="theme-color" content="#faf9f6">
+<meta name="color-scheme" content="light">
+<meta name="robots" content="index,follow">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Inter:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.add("js");</script>
+</head>
+<body class="map-page">
+
+<a class="skip-link" href="#parkMap">Skip to the map</a>
+
+<!-- ============================================================
+     TOP BAR
+     ============================================================ -->
+<header class="map-bar">
+  <a class="map-bar__back" href="index.html#guide" aria-label="Back to the visitor guide">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg>
+    <span>Guide</span>
+  </a>
+  <div class="map-bar__title">
+    <span class="map-bar__name">Live Park Map</span>
+    <span class="map-bar__sub">Al Shaheed Park</span>
+  </div>
+  <div class="map-bar__status">
+    <span class="loc-state" id="locState" hidden>Location off</span>
+    <button class="map-bar__stop" type="button" data-stop-location hidden>Stop</button>
+  </div>
+</header>
+
+<!-- ============================================================
+     MAP
+     ============================================================ -->
+<main class="map-shell">
+  <div class="map-canvas" id="parkMap" tabindex="-1" role="application"
+       aria-label="Interactive map of Al Shaheed Park"></div>
+
+  <p class="map-loading" id="mapLoading">Loading the park map…</p>
+
+  <div class="map-fallback" id="mapFallback" hidden role="alert">
+    <h2>The map could not load</h2>
+    <p id="mapFallbackText"></p>
+    <p class="map-fallback__links">
+      <a href="index.html#guide">Use the schematic park guide</a> ·
+      <a href="https://maps.app.goo.gl/D3nBerKUZVXdPkMo6?g_st=ic" target="_blank" rel="noopener noreferrer">Open Google Maps ↗</a>
+    </p>
+  </div>
+
+  <!-- Inside / outside the park boundary. Never stored. -->
+  <p class="inside-pill" id="insidePill" hidden role="status" aria-live="polite"></p>
+
+  <!-- Compass, shown only when the device reports a heading -->
+  <div class="compass" id="compass" hidden aria-hidden="true">
+    <span class="compass__ring"><span class="compass__needle" id="compassNeedle"></span></span>
+    <span class="compass__deg" id="compassDeg"></span>
+  </div>
+
+  <!-- Map-side controls -->
+  <div class="map-side">
+    <button class="map-icon-btn" type="button" data-recenter aria-label="Re-centre the map">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+    </button>
+    <button class="map-icon-btn" type="button" data-follow aria-pressed="false" aria-label="Follow me while I walk">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l7 17-7-4-7 4z"/></svg>
+    </button>
+  </div>
+
+  <!-- ============================================================
+       FLOATING CONTROL PANEL
+       ============================================================ -->
+  <nav class="map-dock" aria-label="Map tools">
+    <button class="dock-btn dock-btn--primary" type="button" data-locate aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="8"/><path d="M12 1.5v2.5M12 20v2.5M1.5 12h2.5M20 12h2.5"/></svg>
+      <span>Locate Me</span>
+    </button>
+    <button class="dock-btn" type="button" data-panel-open="nearby">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
+      <span>Near Me</span>
+    </button>
+    <button class="dock-btn" type="button" data-panel-open="routes">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 18c4 0 4-12 8-12s4 12 8 12"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/></svg>
+      <span>Routes</span>
+    </button>
+    <button class="dock-btn" type="button" data-panel-open="filter">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+      <span>Filter</span>
+    </button>
+  </nav>
+
+  <!-- ============================================================
+       PANELS
+       ============================================================ -->
+  <section class="map-panel" data-panel="nearby" hidden aria-labelledby="nearbyTitle">
+    <header class="map-panel__head">
+      <h2 id="nearbyTitle">Near you</h2>
+      <button class="map-panel__close" type="button" data-panel-close aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <ul class="nearby" id="nearbyList"></ul>
+    <p class="map-panel__empty" id="nearbyEmpty" hidden></p>
+    <p class="map-panel__note">Distances are measured from your current position on this device and are not saved anywhere.</p>
+  </section>
+
+  <section class="map-panel" data-panel="routes" hidden aria-labelledby="routesTitle">
+    <header class="map-panel__head">
+      <h2 id="routesTitle">Park routes</h2>
+      <button class="map-panel__close" type="button" data-panel-close aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <ul class="route-list" id="routeList"></ul>
+    <p class="route-status" id="routeStatus" role="status" aria-live="polite"></p>
+    <button class="map-text-btn" type="button" data-route-clear>Clear route</button>
+    <p class="map-panel__note">Route lines come from a pedestrian routing service. Distances are measured, never estimated.</p>
+  </section>
+
+  <section class="map-panel" data-panel="filter" hidden aria-labelledby="filterTitle">
+    <header class="map-panel__head">
+      <h2 id="filterTitle">Show on the map</h2>
+      <button class="map-panel__close" type="button" data-panel-close aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <ul class="chips" id="filterList"></ul>
+    <button class="map-text-btn" type="button" data-filter-reset hidden>Show everything</button>
+    <p class="map-panel__note">Greyed-out categories have no verified coordinates inside the park yet, so nothing is plotted for them.</p>
+  </section>
+
+  <!-- ============================================================
+       NAVIGATION BAR (walk there)
+       ============================================================ -->
+  <aside class="nav-bar" id="navBar" hidden aria-live="polite">
+    <div class="nav-bar__body">
+      <p class="nav-bar__route"><span>Your location</span> <span aria-hidden="true">→</span> <span class="nav-bar__dest" id="navName"></span></p>
+      <p class="nav-bar__meta" id="navMeta"></p>
+      <p class="nav-bar__mode" id="navMode" hidden></p>
+      <p class="nav-bar__remaining" id="navRemaining"></p>
+    </div>
+    <button class="nav-bar__exit" type="button" data-nav-exit aria-label="End navigation">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </aside>
+
+  <!-- ============================================================
+       PLACE BOTTOM SHEET
+       ============================================================ -->
+  <section class="sheet" id="placeSheet" hidden aria-labelledby="sheetName">
+    <button class="sheet__close" type="button" data-sheet-close aria-label="Close place details">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <p class="sheet__cat" id="sheetCat"></p>
+    <h2 class="sheet__name display" id="sheetName"></h2>
+    <p class="sheet__dist" id="sheetDist" hidden></p>
+    <p class="sheet__desc" id="sheetDesc"></p>
+    <p class="sheet__hours" id="sheetHours" hidden></p>
+    <p class="sheet__note" id="sheetNote" hidden></p>
+    <div class="sheet__actions">
+      <button class="btn btn--small btn--dark" type="button" id="sheetWalk">Walk there</button>
+      <a class="btn btn--small btn--outline" id="sheetDetails" href="index.html#dining">View details</a>
+      <a class="btn btn--small btn--outline" id="sheetMaps" href="#" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>
+    </div>
+    <p class="sheet__source" id="sheetSource"></p>
+  </section>
+
+  <!-- ============================================================
+       LOCATION PERMISSION EXPLAINER (shown before the browser prompt)
+       ============================================================ -->
+  <section class="sheet sheet--perm" id="permSheet" hidden aria-labelledby="permTitle">
+    <button class="sheet__close" type="button" data-perm-dismiss aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <h2 class="sheet__name display" id="permTitle">Find yourself inside the park</h2>
+    <p class="sheet__desc">
+      Allow location access to see where you are, discover nearby places and navigate through Al Shaheed Park.
+    </p>
+    <ul class="perm-list">
+      <li>Your position stays on this device for the length of your visit.</li>
+      <li>It is never saved to an account, a database or a location history.</li>
+      <li>Your coordinates are sent out once only if you ask for walking directions, so the route can be calculated.</li>
+    </ul>
+    <div class="sheet__actions">
+      <button class="btn btn--small btn--dark" type="button" data-use-location>Use my location</button>
+      <button class="btn btn--small btn--outline" type="button" data-perm-dismiss>Not now</button>
+    </div>
+    <p class="sheet__source">You can turn it off again at any time with the Stop button in the top bar.</p>
+  </section>
+</main>
+
+<noscript>
+  <div class="map-noscript">
+    <h2>The live map needs JavaScript</h2>
+    <p>
+      Live location and routing cannot run without it. The
+      <a href="index.html#guide">schematic park guide</a> works without JavaScript, and
+      <a href="https://maps.app.goo.gl/D3nBerKUZVXdPkMo6?g_st=ic" target="_blank" rel="noopener noreferrer">Google Maps</a>
+      has the park's location.
+    </p>
+  </div>
+</noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<script src="park-data.js"></script>
+<script src="map.js" defer></script>
+</body>
+</html>
