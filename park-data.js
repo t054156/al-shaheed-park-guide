@@ -898,36 +898,153 @@
     }
   ];
 
-  /* --- Data adapter ----------------------------------------------------
-     map.js only ever calls these. To move to Supabase, replace the bodies:
+  /* --- Supabase-backed data adapter ------------------------------------
+     map.js only ever calls these four methods. They read the park content
+     tables over Supabase's REST endpoint using plain fetch — no client
+     library, so the page stays dependency-free.
 
-       async getPlaces() {
-         const { data, error } = await supabase
-           .from("places").select("*")
-           .eq("is_active", true).order("display_order");
-         if (error) throw error;
-         return data;
-       }
+     The key below is the PUBLISHABLE key. It is designed to sit in a browser:
+     every one of these tables has row level security enabled with a single
+     SELECT-only policy on active rows and no insert/update/delete policy at
+     all, so this key cannot write anything. The service-role key is never
+     used here and must never appear in this repository.
 
-     Nothing else in map.js needs to change. No visitor coordinates are ever
-     passed to these functions, so the data layer never sees a user location.
+     If Supabase is unreachable — offline, project paused, network blocked —
+     each call falls back to the arrays above, which are the same verified
+     data. The map keeps working either way.
+
+     No visitor coordinates are ever passed into these functions, so the
+     backend never receives a user position. Distance and "near me" maths
+     stay in map.js on the device.
   --------------------------------------------------------------------- */
+  const SUPABASE = {
+    url: "https://zsdjlvhidarnszsmrule.supabase.co",
+    key: "sb_publishable_R7WMf55kS7_C_BhZJK-Nhg_vcNRi7Sd",
+    timeoutMs: 6000
+  };
+
+  let usedFallback = false;
+
+  async function restSelect(path) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SUPABASE.timeoutMs);
+    try {
+      const res = await fetch(SUPABASE.url + "/rest/v1/" + path, {
+        headers: {
+          apikey: SUPABASE.key,
+          Authorization: "Bearer " + SUPABASE.key,
+          Accept: "application/json"
+        },
+        signal: controller.signal
+      });
+      if (!res.ok) throw new Error("supabase " + res.status);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Map a places row onto the shape map.js expects. */
+  function rowToPlace(r) {
+    return {
+      id: r.slug,
+      name: r.name,
+      name_ar: r.name_ar || undefined,
+      name_full: r.name_full || undefined,
+      category: r.category,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      google_maps_url: r.google_maps_url,
+      description: r.description,
+      hours: r.opening_hours || null,
+      availability: r.availability === "unverified" ? undefined : r.availability,
+      phase: r.phase,
+      source: r.coord_source,
+      note: r.note || undefined,
+      image_url: r.image_url || null,
+      scene: null,
+      is_active: r.is_active,
+      display_order: r.display_order
+    };
+  }
+
+  function rowToRoute(r) {
+    return {
+      id: r.slug,
+      name: r.name,
+      category: r.category,
+      description: r.description,
+      waypoints: r.waypoint_slugs || [],
+      distance_meters: r.distance_meters,
+      estimated_minutes: r.estimated_minutes,
+      geojson: r.geojson,
+      is_active: r.is_active,
+      available: r.is_available,
+      unavailable_reason: r.unavailable_reason || undefined
+    };
+  }
+
+  let cachedPlaces = null;
+
   const ParkData = {
+    /** True once any call has had to use the bundled fallback data. */
+    isUsingFallback() {
+      return usedFallback;
+    },
+
     async getBoundary() {
-      return PARK_BOUNDARY;
+      try {
+        const rows = await restSelect("park_areas?select=slug,name,phase,osm_ref,geojson&is_active=eq.true");
+        if (!rows.length) throw new Error("no park areas");
+        return {
+          type: "FeatureCollection",
+          features: rows.map(r => ({
+            type: "Feature",
+            properties: { name: r.name, phase: r.phase, osm: r.osm_ref },
+            geometry: r.geojson
+          }))
+        };
+      } catch (e) {
+        usedFallback = true;
+        console.warn("park boundary: using bundled data (" + e.message + ")");
+        return PARK_BOUNDARY;
+      }
     },
+
     async getPlaces() {
-      return PLACES.filter(p => p.is_active)
-                   .sort((a, b) => a.display_order - b.display_order);
+      try {
+        const rows = await restSelect("places?select=*&is_active=eq.true&order=display_order.asc");
+        if (!rows.length) throw new Error("no places");
+        cachedPlaces = rows.map(rowToPlace);
+        return cachedPlaces;
+      } catch (e) {
+        usedFallback = true;
+        console.warn("places: using bundled data (" + e.message + ")");
+        cachedPlaces = PLACES.filter(p => p.is_active)
+                             .sort((a, b) => a.display_order - b.display_order);
+        return cachedPlaces;
+      }
     },
+
     async getRoutes() {
-      return ROUTES.filter(r => r.is_active);
+      try {
+        const rows = await restSelect("routes?select=*&is_active=eq.true&order=display_order.asc");
+        if (!rows.length) throw new Error("no routes");
+        return rows.map(rowToRoute);
+      } catch (e) {
+        usedFallback = true;
+        console.warn("routes: using bundled data (" + e.message + ")");
+        return ROUTES.filter(r => r.is_active);
+      }
     },
+
     getCategories() {
       return CATEGORIES;
     },
+
     getPlace(id) {
-      return PLACES.find(p => p.id === id) || null;
+      const list = cachedPlaces || PLACES;
+      return list.find(p => p.id === id) || null;
     }
   };
 
